@@ -29,7 +29,7 @@ def _read_env(path: Path) -> dict[str, str]:
 class Settings:
     nvidia_api_key: str = ""
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
-    vision_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    vision_model: str = "meta/llama-3.2-11b-vision-instruct"
     writer_model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     naver_client_id: str = ""
     naver_client_secret: str = ""
