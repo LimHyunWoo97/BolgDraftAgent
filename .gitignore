@@ -1,5 +1,10 @@
 .env
+.style_profiles.json
 __pycache__/
 *.py[cod]
 .pytest_cache/
 exports/
+build/
+dist/
+work/
+*.spec
