@@ -18,6 +18,8 @@
 - 테마를 추가할 때는 `blog_agent/style.py`의 가이드와 테스트를 함께 추가한다.
 - API 키가 없어도 로컬 초안 모드가 동작해야 한다.
 - UI 작업은 Windows의 `Malgun Gothic` 표시와 Tkinter 런타임을 고려한다.
+- 사진 미리보기 의존성(Pillow)을 변경하면 `requirements.txt`, 빌드 스크립트, GitHub Actions 설치 단계를 함께 갱신한다.
+- 글 생성 흐름은 `초안 설계 → 사용자 검토 → 완성 본문`을 유지하며, 완성 본문 단계도 설계안 밖의 사실을 새로 만들지 않는다.
 
 ## 검증
 
