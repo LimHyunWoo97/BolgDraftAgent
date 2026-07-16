@@ -28,7 +28,7 @@ jobs:
           python -c "import tkinter as tk; root = tk.Tk(); root.destroy(); print('Tkinter OK')"
 
       - name: Install packager
-        run: python -m pip install --upgrade pip pyinstaller
+        run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
 
       - name: Build Windows application
         run: >
