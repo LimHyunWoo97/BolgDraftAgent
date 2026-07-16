@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .config import Settings
 from .nvidia_client import NvidiaClient, NvidiaError
-from .style import build_style_profile, choose_reference_samples
+from .style import build_style_profile, choose_reference_samples, theme_guide
 
 
 @dataclass
@@ -16,15 +16,17 @@ class DraftResult:
     used_remote_model: bool
 
 
-def _local_draft(topic: str, memo: str, photo_notes: list[str], style_profile: str) -> str:
+def _local_draft(topic: str, memo: str, photo_notes: list[str], style_profile: str, theme: str) -> str:
     title = topic.strip() or "오늘 기록"
+    section_title = "방문하게 된 계기" if theme in ("맛집 후기", "카페", "여행") else "시작하며"
+    photo_section = "메뉴와 사진 기록" if theme in ("맛집 후기", "카페") else "사진으로 남긴 순간"
     lines = [
         f"# {title}",
         "",
-        "## 시작하며",
+        f"## {section_title}",
         memo.strip() or "오늘의 기록을 사진과 함께 남겨본다.",
         "",
-        "## 사진으로 남긴 순간",
+        f"## {photo_section}",
     ]
     if photo_notes:
         for index, note in enumerate(photo_notes, start=1):
@@ -41,7 +43,7 @@ def _local_draft(topic: str, memo: str, photo_notes: list[str], style_profile: s
         [
             "",
             "## 마무리",
-            "이 글은 NVIDIA API 키 없이 만든 로컬 초안입니다. 설정에서 API 키를 저장하면 사진 분석과 말투 반영 초안을 생성할 수 있습니다.",
+            "이 글은 NVIDIA API 키 없이 만든 로컬 초안입니다. 설정에서 API 키를 저장하면 사진 분석, 테마 구성, 말투 반영 초안을 생성할 수 있습니다.",
             "",
             "#기록 #블로그초안",
             "",
@@ -58,15 +60,16 @@ def generate_draft(
     photos: list[Path],
     photo_notes: list[str],
     style_samples: str,
+    theme: str = "직접 입력",
 ) -> DraftResult:
-    style_profile = build_style_profile(style_samples)
+    style_profile = build_style_profile(style_samples, theme)
     client = NvidiaClient(settings)
 
     try:
         image_analysis = client.analyze_images(photos, photo_notes)
         if not client.enabled:
             return DraftResult(
-                content=_local_draft(topic, memo, photo_notes, style_profile),
+                content=_local_draft(topic, memo, photo_notes, style_profile, theme),
                 image_analysis=image_analysis,
                 style_profile=style_profile,
                 used_remote_model=False,
@@ -90,6 +93,12 @@ def generate_draft(
 
 [주제]
 {topic or '사용자 기록'}
+
+[선택 테마]
+{theme}
+
+[테마 작성 가이드]
+{theme_guide(theme)}
 
 [사용자 메모]
 {memo or '(없음)'}
@@ -124,7 +133,7 @@ def generate_draft(
         )
         return DraftResult(content, image_analysis, style_profile, True)
     except NvidiaError as error:
-        fallback = _local_draft(topic, memo, photo_notes, style_profile)
+        fallback = _local_draft(topic, memo, photo_notes, style_profile, theme)
         return DraftResult(
             content=f"[NVIDIA 모델 호출 실패: {error}]\n\n{fallback}",
             image_analysis=f"사진 분석 실패: {error}",
