@@ -1,0 +1,2 @@
+# This MVP uses only the Python standard library.
+# Python 3.11+ is recommended. Tkinter is included with the standard Windows installer.
