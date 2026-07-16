@@ -1,9 +1,13 @@
-name: Build Windows app
+name: Test, build and release Windows app
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   test-and-build:
@@ -29,11 +33,26 @@ jobs:
       - name: Build Windows application
         run: >
           python -m PyInstaller --noconfirm --clean --windowed
-          --name BlogDraftAgent app.py
+          --name BlogDraftAgent --icon assets\blog-draft-agent-logo.ico
+          --add-data "assets\blog-draft-agent-logo.ico;assets" app.py
+
+      - name: Package release ZIP
+        run: >
+          Compress-Archive -Path dist\BlogDraftAgent\*
+          -DestinationPath dist\BlogDraftAgent-windows-x64.zip -Force
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
           name: BlogDraftAgent-windows
-          path: dist/BlogDraftAgent
+          path: dist/BlogDraftAgent-windows-x64.zip
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}" dist\BlogDraftAgent-windows-x64.zip
+          --title "Blog Draft Agent ${{ github.ref_name }}"
+          --generate-notes
