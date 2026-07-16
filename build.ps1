@@ -35,7 +35,7 @@ if ($Clean) {
 }
 
 & $venvPython -m pip install --upgrade pyinstaller
-& $venvPython -m PyInstaller --noconfirm --clean --windowed --name BlogDraftAgent app.py
+& $venvPython -m PyInstaller --noconfirm --clean --windowed --name BlogDraftAgent --icon assets\blog-draft-agent-logo.ico --add-data "assets\blog-draft-agent-logo.ico;assets" app.py
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
