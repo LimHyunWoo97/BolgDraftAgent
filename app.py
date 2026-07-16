@@ -2,15 +2,24 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+import webbrowser
+import sys
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from blog_agent.config import Settings
 from blog_agent.draft_service import DraftResult, generate_draft
 from blog_agent.naver_oauth import NaverLogin, NaverProfile
+from blog_agent.profiles import THEMES, ThemeProfileStore
 
 
 APP_TITLE = "Blog Draft Agent"
+
+
+def resource_path(relative_path: str) -> Path:
+    """Resolve bundled UI assets both in source and PyInstaller builds."""
+    bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return bundle_root / relative_path
 
 
 class BlogDraftAgent(tk.Tk):
@@ -19,11 +28,16 @@ class BlogDraftAgent(tk.Tk):
         self.title(APP_TITLE)
         self.geometry("1420x900")
         self.minsize(1120, 720)
+        icon_path = resource_path("assets/blog-draft-agent-logo.ico")
+        if icon_path.exists():
+            self.iconbitmap(default=str(icon_path))
         self.settings = Settings.load()
         self.photos: list[Path] = []
         self.naver_profile: NaverProfile | None = None
 
         self.topic_var = tk.StringVar()
+        self.theme_var = tk.StringVar(value="맛집 후기")
+        self.style_store = ThemeProfileStore()
         self.status_var = tk.StringVar(value="사진과 메모를 입력한 뒤 초안 만들기를 누르세요.")
         self.naver_status_var = tk.StringVar(value="네이버 로그인: 연결 안 됨")
         self._configure_style()
@@ -64,7 +78,19 @@ class BlogDraftAgent(tk.Tk):
 
     def _build_form(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        ttk.Label(parent, text="글 주제", style="Header.TLabel").grid(row=0, column=0, sticky="w")
+        topic_header = ttk.Frame(parent)
+        topic_header.grid(row=0, column=0, sticky="ew")
+        ttk.Label(topic_header, text="글 주제", style="Header.TLabel").pack(side="left")
+        ttk.Label(topic_header, text="테마").pack(side="right", padx=(8, 4))
+        theme_combo = ttk.Combobox(
+            topic_header,
+            textvariable=self.theme_var,
+            values=THEMES,
+            state="readonly",
+            width=12,
+        )
+        theme_combo.pack(side="right")
+        theme_combo.bind("<<ComboboxSelected>>", lambda _event: self.load_theme_samples())
         ttk.Entry(parent, textvariable=self.topic_var).grid(row=1, column=0, sticky="ew", pady=(4, 12))
 
         ttk.Label(parent, text="간단한 상황·사실 메모").grid(row=2, column=0, sticky="w")
@@ -86,12 +112,16 @@ class BlogDraftAgent(tk.Tk):
         ttk.Label(parent, text="내 기존 글 예시 (붙여넣기)").grid(row=8, column=0, sticky="w")
         ttk.Label(
             parent,
-            text="말투·문단 길이·이모지 사용만 분석합니다. 예시는 최소 3개, 권장은 20개입니다.",
+            text="테마별로 말투 예시를 로컬에 저장합니다. 문장·사실은 복사하지 않고 문체와 구성만 반영합니다.",
             foreground="#666666",
         ).grid(row=9, column=0, sticky="w", pady=(2, 4))
+        profile_actions = ttk.Frame(parent)
+        profile_actions.grid(row=10, column=0, sticky="ew", pady=(0, 5))
+        ttk.Button(profile_actions, text="현재 테마 샘플 저장", command=self.save_theme_samples).pack(side="left")
+        ttk.Button(profile_actions, text="저장된 샘플 불러오기", command=self.load_theme_samples).pack(side="left", padx=5)
         self.style_samples_text = tk.Text(parent, height=14, wrap="word", font=("Malgun Gothic", 10))
-        self.style_samples_text.grid(row=10, column=0, sticky="nsew")
-        parent.rowconfigure(10, weight=1)
+        self.style_samples_text.grid(row=11, column=0, sticky="nsew")
+        parent.rowconfigure(11, weight=1)
 
     def _build_result(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -165,7 +195,15 @@ class BlogDraftAgent(tk.Tk):
         style_samples = self.style_samples_text.get("1.0", "end").strip()
 
         def work() -> None:
-            draft = generate_draft(self.settings, topic, memo, self.photos, photo_notes, style_samples)
+            draft = generate_draft(
+                self.settings,
+                topic,
+                memo,
+                self.photos,
+                photo_notes,
+                style_samples,
+                self.theme_var.get(),
+            )
             self.after(0, lambda: self.show_result(draft))
 
         threading.Thread(target=work, daemon=True).start()
@@ -177,6 +215,22 @@ class BlogDraftAgent(tk.Tk):
         source = "NVIDIA 모델" if draft.used_remote_model else "로컬 초안 모드"
         self.status_var.set(f"완료: {source}로 초안을 만들었습니다. 내용을 검토한 뒤 저장하거나 복사하세요.")
         self.generate_button.configure(state="normal")
+
+    def save_theme_samples(self) -> None:
+        samples = self.style_samples_text.get("1.0", "end").strip()
+        if not samples:
+            messagebox.showinfo(APP_TITLE, "저장할 말투 예시를 먼저 붙여 넣어 주세요.")
+            return
+        self.style_store.save(self.theme_var.get(), samples)
+        self.status_var.set(f"‘{self.theme_var.get()}’ 테마의 말투 예시를 이 PC에 저장했습니다.")
+
+    def load_theme_samples(self) -> None:
+        samples = self.style_store.load(self.theme_var.get())
+        self._set_text(self.style_samples_text, samples)
+        if samples:
+            self.status_var.set(f"‘{self.theme_var.get()}’ 테마의 저장된 말투 예시를 불러왔습니다.")
+        else:
+            self.status_var.set(f"‘{self.theme_var.get()}’ 테마는 기본 작성 가이드로 초안을 만듭니다.")
 
     @staticmethod
     def _set_text(widget: tk.Text, value: str) -> None:
@@ -233,6 +287,14 @@ class BlogDraftAgent(tk.Tk):
         dialog.resizable(False, False)
         content = ttk.Frame(dialog, padding=16)
         content.pack(fill="both", expand=True)
+        ttk.Button(content, text="NVIDIA API 키 발급 페이지 열기", command=self.open_nvidia_api_page).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        ttk.Label(
+            content,
+            text="NVIDIA Build 로그인 → Get API Key/Generate → 아래 NVIDIA API Key에 붙여 넣으세요.",
+            foreground="#666666",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 12))
         fields = [
             ("NVIDIA API Key", "nvidia_api_key", True),
             ("NVIDIA Base URL", "nvidia_base_url", False),
@@ -243,7 +305,7 @@ class BlogDraftAgent(tk.Tk):
             ("NAVER Redirect URI", "naver_redirect_uri", False),
         ]
         entries: dict[str, ttk.Entry] = {}
-        for row, (label, name, secret) in enumerate(fields):
+        for row, (label, name, secret) in enumerate(fields, start=1):
             ttk.Label(content, text=label).grid(row=row * 2, column=0, sticky="w")
             entry = ttk.Entry(content, width=64, show="*" if secret else "")
             entry.insert(0, getattr(self.settings, name))
@@ -253,7 +315,7 @@ class BlogDraftAgent(tk.Tk):
             content,
             text="실제 키는 로컬 .env에만 저장되며 Git에 포함되지 않습니다.\nNaver 로그인은 사용자 식별용이며 게시물 발행 기능은 제공하지 않습니다.",
             foreground="#666666",
-        ).grid(row=len(fields) * 2, column=0, sticky="w", pady=(2, 10))
+        ).grid(row=(len(fields) + 1) * 2, column=0, sticky="w", pady=(2, 10))
 
         def save() -> None:
             for name, entry in entries.items():
@@ -263,8 +325,12 @@ class BlogDraftAgent(tk.Tk):
             self.status_var.set("설정을 로컬 .env 파일에 저장했습니다.")
 
         ttk.Button(content, text="저장", style="Primary.TButton", command=save).grid(
-            row=len(fields) * 2 + 1, column=0, sticky="e"
+            row=(len(fields) + 1) * 2 + 1, column=0, sticky="e"
         )
+
+    @staticmethod
+    def open_nvidia_api_page() -> None:
+        webbrowser.open("https://build.nvidia.com/settings/api-key")
 
 
 if __name__ == "__main__":
